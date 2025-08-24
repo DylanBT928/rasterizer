@@ -1,110 +1,104 @@
 #include "tgaimage.hpp"
 
-#include <cstddef>
-#include <fstream>
+#include <cstring>
 #include <iostream>
 
-TGAColor::TGAColor() : val(0), bytespp(1) {}
-
-TGAColor::TGAColor(unsigned char R, unsigned char G, unsigned char B,
-                   unsigned char A)
-    : b(B), g(G), r(R), a(A), bytespp(4)
+TGAImage::TGAImage(const int w, const int h, const int bpp) noexcept
+    : w(w), h(h), bpp(bpp), data(w * h * bpp, 0)
 {
 }
 
-TGAColor::TGAColor(int v, int bpp) : val(v), bytespp(bpp) {}
-
-TGAColor::TGAColor(const TGAColor& c) : val(c.val), bytespp(c.bytespp) {}
-
-TGAColor::TGAColor(const unsigned char* p, int bpp) : val(0), bytespp(bpp)
+TGAColor TGAImage::get(const int x, const int y) const
 {
-    for (int i = 0; i < bpp; ++i) raw[i] = p[i];
+    if (data.empty() || x < 0 || y < 0 || x >= w || y >= h)
+        return {};
+
+    const std::size_t idx{
+        (static_cast<std::size_t>(y) * static_cast<std::size_t>(w) +
+         static_cast<std::size_t>(x)) *
+        static_cast<std::size_t>(bpp)};
+    const std::uint8_t* p{data.data() + idx};
+
+    TGAColor pixel{};
+    pixel.bytesPerPixel = bpp;
+    std::memcpy(pixel.rgba.data(), p, static_cast<std::size_t>(bpp));
+
+    return pixel;
 }
 
-TGAColor& TGAColor::operator=(const TGAColor& c)
+void TGAImage::set(const int x, const int y, const TGAColor& c)
 {
-    if (this != &c)
+    if (data.empty() || x < 0 || y < 0 || x >= w || y >= h)
+        return;
+
+    const std::size_t idx{
+        (static_cast<std::size_t>(y) * static_cast<std::size_t>(w) +
+         static_cast<std::size_t>(x)) *
+        static_cast<std::size_t>(bpp)};
+
+    std::memcpy(&data[idx], c.rgba.data(), static_cast<std::size_t>(bpp));
+}
+
+bool TGAImage::readTGAFile(const std::filesystem::path& filename)
+{
+    std::ifstream in(filename, std::ios::binary);
+
+    if (!in)
     {
-        bytespp = c.bytespp;
-        val = c.val;
-    }
-
-    return *this;
-}
-
-TGAImage::TGAImage() : data(nullptr), width(0), height(0), bytespp(0) {}
-
-TGAImage::TGAImage(int w, int h, int bpp)
-    : data(nullptr), width(w), height(h), bytespp(bpp)
-{
-    unsigned long nBytes = width * height * bytespp;
-    data = new unsigned char[nBytes];
-    memset(data, 0, nBytes);
-}
-
-TGAImage::TGAImage(const TGAImage& img)
-    : width(img.width), height(img.height), bytespp(img.bytespp)
-{
-    unsigned long nBytes = width * height * bytespp;
-    data = new unsigned char[nBytes];
-    memcpy(data, img.data, nBytes);
-}
-
-TGAImage::~TGAImage()
-{
-    if (data)
-        delete[] data;
-}
-
-bool TGAImage::readTGAFile(const char* file)
-{
-    if (data)
-        delete[] data;
-
-    data = nullptr;
-    std::ifstream in;
-    in.open(file, std::ios::binary);
-
-    if (!in.is_open())
-    {
-        std::cerr << "Cannot open file " << file << ".\n";
-        in.close();
+        std::cerr << "Cannot open file " << filename << '\n';
         return false;
     }
 
-    TGAHeader header;
-    in.read((char*)&header, sizeof(header));
+    TGAHeader header{};
 
-    if (!in.good())
+    in.read(reinterpret_cast<char*>(&header), sizeof(header));
+
+    if (!in)
     {
-        std::cerr << "An error occured while reading the header.\n";
-        in.close();
+        std::cerr << "Error reading TGA header\n";
         return false;
     }
 
-    width = header.width;
-    height = header.height;
-    bytespp = header.bitsPerPixel >> 3;
-
-    if (width <= 0 || height <= 0 ||
-        (bytespp != GRAYSCALE && bytespp != RGB && bytespp != RGBA))
+    if (header.idLength)
     {
-        std::cerr << "Bad bpp, width, or height value.\n";
-        in.close();
+        in.seekg(header.idLength, std::ios::cur);
+
+        if (!in)
+        {
+            std::cerr << "Error skipping TGA Image ID field\n";
+            return false;
+        }
+    }
+
+    if (header.colorMapType != 0)
+    {
+        std::cerr << "Color-mapped TGA not supported\n";
         return false;
     }
 
-    unsigned long nBytes = width * height * bytespp;
-    data = new unsigned char[nBytes];
+    w = header.width;
+    h = header.height;
+    bpp = static_cast<std::uint8_t>(header.bitsPerPixel >> 3);
+
+    if (w <= 0 || h <= 0 || (bpp != GRAYSCALE && bpp != RGB && bpp != RGBA))
+    {
+        std::cerr << "Bad size or unsupported bpp (" << int(bpp) << ")\n";
+        return false;
+    }
+
+    const std::size_t nbytes = static_cast<std::size_t>(w) *
+                               static_cast<std::size_t>(h) *
+                               static_cast<std::size_t>(bpp);
+    data.assign(nbytes, 0);
 
     if (header.dataTypeCode == 2 || header.dataTypeCode == 3)
     {
-        in.read((char*)data, nBytes);
+        in.read(reinterpret_cast<char*>(data.data()),
+                static_cast<std::streamsize>(nbytes));
 
-        if (!in.good())
+        if (!in)
         {
-            std::cerr << "An error occured while reading the data.\n";
-            in.close();
+            std::cerr << "Error reading pixel data\n";
             return false;
         }
     }
@@ -112,18 +106,19 @@ bool TGAImage::readTGAFile(const char* file)
     {
         if (!loadRLEData(in))
         {
-            std::cerr << "An error occurred while reading the data.\n";
-            in.close();
+            std::cerr << "Error reading RLE data\n";
             return false;
         }
     }
     else
     {
-        std::cerr << "Unknown file format " << (int)header.dataTypeCode
-                  << ".\n";
-        in.close();
+        std::cerr << "Unknown file format " << int(header.dataTypeCode) << '\n';
         return false;
     }
+
+    if (bpp >= 3)
+        for (std::size_t i{0}; i + (bpp - 1) < data.size(); i += bpp)
+            std::swap(data[i], data[i + 2]);
 
     if (!(header.imageDescriptor & 0x20))
         flipVertically();
@@ -131,300 +126,248 @@ bool TGAImage::readTGAFile(const char* file)
     if (header.imageDescriptor & 0x10)
         flipHorizontally();
 
-    std::cerr << width << "x" << height << "/" << bytespp * 8 << std::endl;
-    in.close();
+    std::cerr << w << 'x' << h << '/' << (bpp * 8) << '\n';
     return true;
 }
 
-bool TGAImage::writeTGAFile(const char* file, bool rle)
+bool TGAImage::writeTGAFile(const std::filesystem::path& filename,
+                            const bool vflip, const bool rle) const
 {
-    unsigned char developerAreaRef[4] = {0, 0, 0, 0};
-    unsigned char extensionAreaRef[4] = {0, 0, 0, 0};
-    unsigned char footer[18] = {'T', 'R', 'U', 'E', 'V', 'I', 'S', 'I', 'O',
-                                'N', '-', 'X', 'F', 'I', 'L', 'E', '.', '\0'};
-    std::ofstream out;
-    out.open(file, std::ios::binary);
+    std::ofstream out(filename, std::ios::binary);
 
-    if (!out.is_open())
+    if (!out)
     {
-        std::cerr << "Cannot open file " << file << ".\n";
-        out.close();
+        std::cerr << "Cannot open file " << filename << '\n';
         return false;
     }
 
-    TGAHeader header;
-    memset((void*)&header, 0, sizeof(header));
-    header.bitsPerPixel = bytespp << 3;
-    header.width = width;
-    header.height = height;
-    header.dataTypeCode =
-        (bytespp == GRAYSCALE ? (rle ? 11 : 3) : (rle ? 10 : 2));
-    header.imageDescriptor = 0x20;  // Top-left origin
-    out.write((char*)&header, sizeof(header));
+    TGAHeader header{};
+    header.bitsPerPixel = static_cast<std::uint8_t>(bpp << 3);
+    header.width = static_cast<std::uint16_t>(w);
+    header.height = static_cast<std::uint16_t>(h);
+    header.dataTypeCode = (bpp == GRAYSCALE ? (rle ? 11 : 3) : (rle ? 10 : 2));
+    header.imageDescriptor = vflip ? 0x00 : 0x20;
 
-    if (!out.good())
+    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+
+    if (!out)
     {
-        std::cerr << "Cannot dump the TGA file.\n";
-        out.close();
+        std::cerr << "Error writing TGA header\n";
         return false;
     }
 
     if (!rle)
     {
-        out.write((char*)data, width * height * bytespp);
+        const std::size_t rowBytes{static_cast<std::size_t>(w) * bpp};
 
-        if (!out.good())
+        if (bpp == GRAYSCALE)
         {
-            std::cerr << "Cannot unload raw data.\n";
-            out.close();
-            return false;
+            out.write(reinterpret_cast<const char*>(data.data()),
+                      static_cast<std::streamsize>(data.size()));
+
+            if (!out)
+            {
+                std::cerr << "Error writing pixels\n";
+                return false;
+            }
+        }
+        else
+        {
+            std::vector<std::uint8_t> row(rowBytes);
+
+            if (bpp == 3)
+            {
+                for (int y{0}; y < h; ++y)
+                {
+                    const std::size_t base =
+                        static_cast<std::size_t>(y) * rowBytes;
+
+                    for (int x{0}; x < w; ++x)
+                    {
+                        const std::size_t s =
+                            base + static_cast<std::size_t>(x) * 3;
+                        const std::size_t d = static_cast<std::size_t>(x) * 3;
+                        row[d] = data[s + 2];
+                        row[d + 1] = data[s + 1];
+                        row[d + 2] = data[s];
+                    }
+
+                    out.write(reinterpret_cast<const char*>(row.data()),
+                              static_cast<std::streamsize>(rowBytes));
+
+                    if (!out)
+                    {
+                        std::cerr << "Error writing pixels\n";
+                        return false;
+                    }
+                }
+            }
+            else
+            {
+                for (int y{0}; y < h; ++y)
+                {
+                    const std::size_t base{static_cast<std::size_t>(y) *
+                                           rowBytes};
+
+                    for (int x{0}; x < w; ++x)
+                    {
+                        const std::size_t s{base +
+                                            static_cast<std::size_t>(x) * 4};
+                        const std::size_t d{static_cast<std::size_t>(x) * 4};
+                        row[d] = data[s + 2];
+                        row[d + 1] = data[s + 1];
+                        row[d + 2] = data[s + 0];
+                        row[d + 3] = data[s + 3];
+                    }
+
+                    out.write(reinterpret_cast<const char*>(row.data()),
+                              static_cast<std::streamsize>(rowBytes));
+
+                    if (!out)
+                    {
+                        std::cerr << "Error writing pixels\n";
+                        return false;
+                    }
+                }
+            }
         }
     }
     else
     {
         if (!unloadRLEData(out))
         {
-            std::cerr << "Cannot unload RLE data.\n";
-            out.close();
+            std::cerr << "Error writing RLE data\n";
             return false;
         }
     }
 
-    out.write((char*)developerAreaRef, sizeof(developerAreaRef));
+    static constexpr std::uint8_t developerAreaRef[4]{0, 0, 0, 0};
+    static constexpr std::uint8_t extensionAreaRef[4]{0, 0, 0, 0};
+    static constexpr std::uint8_t footer[18]{'T', 'R', 'U', 'E', 'V', 'I',
+                                             'S', 'I', 'O', 'N', '-', 'X',
+                                             'F', 'I', 'L', 'E', '.', '\0'};
 
-    if (!out.good())
+    out.write(reinterpret_cast<const char*>(developerAreaRef),
+              sizeof(developerAreaRef));
+    out.write(reinterpret_cast<const char*>(extensionAreaRef),
+              sizeof(extensionAreaRef));
+    out.write(reinterpret_cast<const char*>(footer), sizeof(footer));
+
+    if (!out)
     {
-        std::cerr << "Cannot dump the TGA file.\n";
-        out.close();
+        std::cerr << "Error writing TGA footer\n";
         return false;
     }
 
-    out.write((char*)extensionAreaRef, sizeof(extensionAreaRef));
-
-    if (!out.good())
-    {
-        std::cerr << "Cannot dump the TGA file.\n";
-        out.close();
-        return false;
-    }
-
-    out.write((char*)footer, sizeof(footer));
-
-    if (!out.good())
-    {
-        std::cerr << "Cannot dump the TGA file.\n";
-        out.close();
-        return false;
-    }
-
-    out.close();
     return true;
 }
 
-bool TGAImage::flipHorizontally()
+void TGAImage::flipHorizontally()
 {
-    if (!data)
-        return false;
+    if (data.empty() || w <= 1)
+        return;
 
-    int half = width >> 1;
+    const std::size_t BPP{static_cast<std::size_t>(bpp)};
+    const std::size_t bytesPerRow{static_cast<std::size_t>(w) * BPP};
 
-    for (int i = 0; i < half; ++i)
+    for (int y{0}; y < h; ++y)
     {
-        for (int j = 0; j < height; ++j)
+        std::uint8_t* row{data.data() +
+                          static_cast<std::size_t>(y) * bytesPerRow};
+
+        for (int xL{0}, xR{w - 1}; xL < xR; ++xL, --xR)
         {
-            TGAColor c1 = get(i, j);
-            TGAColor c2 = get(width - i - 1, j);
-            set(i, j, c2);
-            set(width - i - 1, j, c1);
+            std::uint8_t* L{row + static_cast<std::size_t>(xL) * BPP};
+            std::uint8_t* R{row + static_cast<std::size_t>(xR) * BPP};
+
+            for (std::size_t t{0}; t < BPP; ++t) std::swap(L[t], R[t]);
         }
     }
-
-    return true;
 }
 
-bool TGAImage::flipVertically()
+void TGAImage::flipVertically()
 {
-    if (!data)
-        return false;
+    if (data.empty() || h <= 1)
+        return;
 
-    unsigned long bytesPerLine = width * bytespp;
-    unsigned char* line = new unsigned char[bytesPerLine];
-    int half = height >> 1;
+    const std::size_t BPP{static_cast<std::size_t>(bpp)};
+    const std::size_t bytesPerRow{static_cast<std::size_t>(w) * BPP};
+    std::vector<std::uint8_t> rowBuf(bytesPerRow);
 
-    for (int i = 0; i < half; ++i)
+    for (int yTop{0}, yBot{h - 1}; yTop < yBot; ++yTop, --yBot)
     {
-        unsigned long l1 = bytesPerLine * i;
-        unsigned long l2 = (height - i - 1) * bytesPerLine;
-        memmove((void*)line, (void*)(data + l1), bytesPerLine);
-        memmove((void*)(data + l1), (void*)(data + l2), bytesPerLine);
-        memmove((void*)(data + l2), (void*)line, bytesPerLine);
+        std::uint8_t* top{data.data() +
+                          static_cast<std::size_t>(yTop) * bytesPerRow};
+        std::uint8_t* bot{data.data() +
+                          static_cast<std::size_t>(yBot) * bytesPerRow};
+
+        std::memcpy(rowBuf.data(), top, bytesPerRow);
+        std::memcpy(top, bot, bytesPerRow);
+        std::memcpy(bot, rowBuf.data(), bytesPerRow);
     }
-
-    delete[] line;
-    return true;
-}
-
-bool TGAImage::scale(int w, int h)
-{
-    if (w <= 0 || h <= 0 || !data)
-        return false;
-
-    unsigned char* tData = new unsigned char[w * h * bytespp];
-    unsigned long nLineBytes = w * bytespp;
-    unsigned long oLineBytes = width * bytespp;
-    int nScanLine = 0;
-    int oScanLine = 0;
-    int errY = 0;
-
-    for (int i = 0; i < height; ++i)
-    {
-        int errX = width - w;
-        int nx = -bytespp;
-        int ox = -bytespp;
-
-        for (int j = 0; j < width; ++j)
-        {
-            ox += bytespp;
-            errX += w;
-
-            while ((int)width <= errX)
-            {
-                errX -= width;
-                nx += bytespp;
-                memcpy(tData + nScanLine + nx, data + oScanLine + ox, bytespp);
-            }
-        }
-
-        errY += h;
-        oScanLine += oLineBytes;
-
-        while ((int)height <= errY)
-        {
-            if ((int)height << 1 <= errY)
-                memcpy(tData + nScanLine + nLineBytes, tData + nScanLine,
-                       nLineBytes);
-
-            errY -= height;
-            nScanLine += nLineBytes;
-        }
-    }
-
-    delete[] data;
-    data = tData;
-    width = w;
-    height = h;
-    return true;
-}
-
-TGAColor TGAImage::get(int x, int y)
-{
-    if (!data || x < 0 || y < 0 || width <= x || height <= y)
-        return TGAColor();
-
-    return TGAColor(data + (x + y * width) * bytespp, bytespp);
-}
-
-bool TGAImage::set(int x, int y, TGAColor c)
-{
-    if (!data || x < 0 || y < 0 || width <= x || height <= y)
-        return false;
-
-    memcpy(data + (x + y * width) * bytespp, c.raw, bytespp);
-    return true;
-}
-
-int TGAImage::getWidth() { return width; }
-
-int TGAImage::getHeight() { return height; }
-
-int TGAImage::getBytesPP() { return bytespp; }
-
-unsigned char* TGAImage::buffer() { return data; }
-
-void TGAImage::clear() { memset((void*)data, 0, width * height * bytespp); }
-
-TGAImage& TGAImage::operator=(const TGAImage& img)
-{
-    if (this != &img)
-    {
-        if (data)
-            delete[] data;
-
-        width = img.width;
-        height = img.height;
-        bytespp = img.bytespp;
-        unsigned long nBytes = width * height * bytespp;
-        data = new unsigned char[nBytes];
-        memcpy(data, img.data, nBytes);
-    }
-
-    return *this;
 }
 
 bool TGAImage::loadRLEData(std::ifstream& in)
 {
-    unsigned long pixelCount = width * height;
-    unsigned long currentPixel = 0;
-    unsigned long currentByte = 0;
-    TGAColor colorBuffer;
+    const std::size_t BPP{static_cast<std::size_t>(bpp)};
+    const std::size_t pixelCount{static_cast<std::size_t>(w) *
+                                 static_cast<std::size_t>(h)};
+    std::size_t curPix{0};
+    std::size_t curByte{0};
 
-    while (currentPixel < pixelCount)
+    while (curPix < pixelCount)
     {
-        unsigned char chunkHeader = in.get();
+        std::uint8_t chunkHeader{0};
 
-        if (!in.good())
+        if (!in.read(reinterpret_cast<char*>(&chunkHeader), 1))
         {
-            std::cerr << "An error occurred while reading the data.\n";
+            std::cerr << "Error reading RLE chunk header\n";
             return false;
         }
 
         if (chunkHeader < 128)
         {
-            ++chunkHeader;
+            const std::size_t count{static_cast<std::size_t>(chunkHeader) + 1};
 
-            for (int i = 0; i < chunkHeader; ++i)
+            for (std::size_t i{0}; i < count; ++i)
             {
-                in.read((char*)colorBuffer.raw, bytespp);
-
-                if (!in.good())
+                if (!in.read(reinterpret_cast<char*>(data.data() + curByte),
+                             static_cast<std::streamsize>(BPP)))
                 {
-                    std::cerr << "An error occured while reading the header.\n";
+                    std::cerr << "Error reading raw RLE pixel\n";
                     return false;
                 }
 
-                for (int j = 0; j < bytespp; ++j)
-                    data[currentByte++] = colorBuffer.raw[j];
+                curByte += static_cast<std::size_t>(bpp);
 
-                ++currentPixel;
-
-                if (pixelCount < currentPixel)
+                if (++curPix > pixelCount)
                 {
-                    std::cerr << "Too many pixels read.\n";
+                    std::cerr << "Too many pixels (raw)\n";
                     return false;
                 }
             }
         }
         else
         {
-            chunkHeader -= 127;
-            in.read((char*)colorBuffer.raw, bytespp);
+            std::size_t count{static_cast<std::size_t>(chunkHeader) - 127};
+            std::uint8_t px[4];
 
-            if (!in.good())
+            if (!in.read(reinterpret_cast<char*>(px),
+                         static_cast<std::streamsize>(BPP)))
             {
-                std::cerr << "An error occured while reading the header.\n";
+                std::cerr << "Error reading RLE seed pixel\n";
                 return false;
             }
 
-            for (int i = 0; i < chunkHeader; ++i)
+            for (std::size_t i{0}; i < count; ++i)
             {
-                for (int j = 0; j < bytespp; ++j)
-                    data[currentByte++] = colorBuffer.raw[j];
+                for (std::size_t t{0}; t < BPP; ++t) data[curByte + t] = px[t];
 
-                ++currentPixel;
+                curByte += BPP;
 
-                if (pixelCount < currentPixel)
+                if (++curPix > pixelCount)
                 {
-                    std::cerr << "Too many pixels read.\n";
+                    std::cerr << "Too many pixels (rle)\n";
                     return false;
                 }
             }
@@ -434,61 +377,129 @@ bool TGAImage::loadRLEData(std::ifstream& in)
     return true;
 }
 
-bool TGAImage::unloadRLEData(std::ofstream& out)
+bool TGAImage::unloadRLEData(std::ofstream& out) const
 {
-    const unsigned char maxChunkLength = 128;
-    unsigned long nPixels = width * height;
-    unsigned long currentPixel = 0;
+    constexpr std::uint8_t kMaxChunkLen{128};
+    const std::size_t BPP{static_cast<std::size_t>(bpp)};
+    const std::size_t nPixels{static_cast<std::size_t>(w) *
+                              static_cast<std::size_t>(h)};
+    std::array<std::uint8_t, kMaxChunkLen * 4> buf{};
+    std::size_t curPix{0};
 
-    while (currentPixel < nPixels)
+    while (curPix < nPixels)
     {
-        unsigned long chunkStart = currentPixel * bytespp;
-        unsigned long currentByte = currentPixel * bytespp;
-        unsigned char runLength = 1;
-        bool raw = true;
+        const std::size_t chunkStartPix{curPix};
+        const std::size_t chunkStartByte{chunkStartPix * BPP};
+        std::size_t probeByte{chunkStartByte};
+        std::size_t runLen{1};
+        bool raw{true};
 
-        while (currentPixel + runLength < nPixels && runLength < maxChunkLength)
+        while (curPix + runLen < nPixels && runLen < kMaxChunkLen)
         {
-            bool succEq = true;
+            const bool equal{std::memcmp(&data[probeByte],
+                                         &data[probeByte + BPP], BPP) == 0};
+            probeByte += BPP;
 
-            for (int i = 0; succEq && i < bytespp; ++i)
-                succEq =
-                    (data[currentByte + i] == data[currentByte + bytespp + i]);
+            if (runLen == 1)
+                raw = !equal;
 
-            currentByte += bytespp;
-
-            if (runLength == 1)
-                raw = !succEq;
-
-            if (raw && succEq)
+            if (raw && equal)
             {
-                --runLength;
+                --runLen;
                 break;
             }
 
-            if (!raw && !succEq)
+            if (!raw && !equal)
                 break;
 
-            ++runLength;
+            ++runLen;
         }
 
-        currentPixel += runLength;
-        out.put(raw ? runLength - 1 : runLength + 127);
+        out.put(raw ? static_cast<char>(runLen - 1)
+                    : static_cast<char>(runLen + 127));
 
-        if (!out.good())
-        {
-            std::cerr << "Cannot dump the TGA file.\n";
+        if (!out)
             return false;
-        }
 
-        out.write((char*)(data + chunkStart),
-                  (raw ? runLength * bytespp : bytespp));
-
-        if (!out.good())
+        if (raw)
         {
-            std::cerr << "Cannot dump the TGA file.\n";
-            return false;
+            const std::size_t start{chunkStartByte};
+
+            if (BPP == 1)
+            {
+                const std::size_t bytes{runLen * BPP};
+
+                if (!out.write(reinterpret_cast<const char*>(&data[start]),
+                               static_cast<std::streamsize>(bytes)))
+                    return false;
+            }
+            else if (BPP == 3)
+            {
+                std::size_t s{start};
+                std::size_t d{0};
+
+                for (std::size_t i{0}; i < runLen; ++i, s += 3, d += 3)
+                {
+                    buf[d] = data[s + 2];
+                    buf[d + 1] = data[s + 1];
+                    buf[d + 2] = data[s];
+                }
+
+                const std::size_t bytes{runLen * 3};
+
+                if (!out.write(reinterpret_cast<const char*>(buf.data()),
+                               static_cast<std::streamsize>(bytes)))
+                    return false;
+            }
+            else
+            {
+                std::size_t s{start};
+                std::size_t d{0};
+
+                for (std::size_t i{0}; i < runLen; ++i, s += 4, d += 4)
+                {
+                    buf[d] = data[s + 2];
+                    buf[d + 1] = data[s + 1];
+                    buf[d + 2] = data[s];
+                    buf[d + 3] = data[s + 3];
+                }
+
+                const std::size_t bytes{runLen * 4};
+
+                if (!out.write(reinterpret_cast<const char*>(buf.data()),
+                               static_cast<std::streamsize>(bytes)))
+                    return false;
+            }
         }
+        else
+        {
+            const std::size_t s{chunkStartByte};
+
+            if (BPP == 1)
+            {
+                if (!out.write(reinterpret_cast<const char*>(&data[s]), 1))
+                    return false;
+            }
+            else if (BPP == 3)
+            {
+                const std::uint8_t triplet[3]{data[s + 2], data[s + 1],
+                                              data[s]};
+
+                if (!out.write(reinterpret_cast<const char*>(triplet), 3))
+                    return false;
+            }
+            else
+            {
+                const std::uint8_t quad[4]{data[s + 2], data[s + 1], data[s],
+                                           data[s + 3]};
+
+                if (!out.write(reinterpret_cast<const char*>(quad), 4))
+                    return false;
+            }
+        }
+
+        curPix += runLen;
     }
+
     return true;
 }

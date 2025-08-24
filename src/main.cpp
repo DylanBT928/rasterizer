@@ -1,13 +1,28 @@
 #include "tgaimage.hpp"
 
-const TGAColor white = TGAColor(255, 255, 255, 255);
-const TGAColor red = TGAColor(255, 0, 0, 255);
+constexpr TGAColor red{{255, 0, 0, 255}};
+constexpr TGAColor green{{0, 255, 0, 255}};
+constexpr TGAColor blue{{0, 0, 255, 255}};
 
 int main()
 {
-    TGAImage image(100, 100, TGAImage::RGB);
-    image.set(52, 41, red);
-    image.flipVertically();
-    image.writeTGAFile("assets/output.tga");
+    constexpr int width{64};
+    constexpr int height{64};
+    TGAImage framebuffer(width, height, TGAImage::RGB);
+
+    int ax{10};
+    int ay{12};
+
+    int bx{16};
+    int by{47};
+
+    int cx{50};
+    int cy{53};
+
+    framebuffer.set(ax, ay, red);
+    framebuffer.set(bx, by, green);
+    framebuffer.set(cx, cy, blue);
+
+    framebuffer.writeTGAFile("assets/output.tga");
     return 0;
 }

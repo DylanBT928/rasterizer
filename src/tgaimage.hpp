@@ -1,88 +1,82 @@
-#ifndef TGAIMAGE_HPP
-#define TGAIMAGE_HPP
+#pragma once
 
+#include <array>
+#include <cassert>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
+#include <vector>
 
 static_assert(true);
 #pragma pack(push, 1)
+
 struct TGAHeader
 {
-    char idLength;
-    char colorMapType;
-    char dataTypeCode;
-    short colorMapOrigin;
-    short colorMapLength;
-    char colorMapDepth;
-    short originX;
-    short originY;
-    short width;
-    short height;
-    char bitsPerPixel;
-    char imageDescriptor;
+    std::uint8_t idLength{0};
+    std::uint8_t colorMapType{0};
+    std::uint8_t dataTypeCode{0};
+    std::uint16_t colorMapOrigin{0};
+    std::uint16_t colorMapLength{0};
+    std::uint8_t colorMapDepth{0};
+    std::uint16_t xOrigin{0};
+    std::uint16_t yOrigin{0};
+    std::uint16_t width{0};
+    std::uint16_t height{0};
+    std::uint8_t bitsPerPixel{0};
+    std::uint8_t imageDescriptor{0};
 };
+
 #pragma pack(pop)
 
-class TGAColor
+struct TGAColor
 {
-   public:
-    union
-    {
-        struct
-        {
-            unsigned char b, g, r, a;
-        };
-        unsigned char raw[4];
-        unsigned int val;
-    };
-    int bytespp;
+    std::array<std::uint8_t, 4> rgba{0, 0, 0, 0};
+    std::uint8_t bytesPerPixel{4};
 
-    TGAColor();
-    TGAColor(unsigned char R, unsigned char G, unsigned char B,
-             unsigned char A);
-    TGAColor(int v, int bpp);
-    TGAColor(const TGAColor& c);
-    TGAColor(const unsigned char* p, int bpp);
-    TGAColor& operator=(const TGAColor& c);
+    std::uint8_t& operator[](const int i) noexcept
+    {
+        assert(0 <= i && i < 4);
+        return rgba[static_cast<size_t>(i)];
+    }
+
+    const std::uint8_t& operator[](const int i) const noexcept
+    {
+        assert(0 <= i && i < 4);
+        return rgba[static_cast<size_t>(i)];
+    }
 };
 
-class TGAImage
+struct TGAImage
 {
-   public:
-    enum FORMAT
+    enum Format
     {
         GRAYSCALE = 1,
         RGB = 3,
         RGBA = 4
     };
 
-    TGAImage();
-    TGAImage(int w, int h, int bpp);
-    TGAImage(const TGAImage& img);
-    ~TGAImage();
+    TGAImage() = default;
+    TGAImage(const int w, const int h, const int bpp) noexcept;
 
-    bool readTGAFile(const char* file);
-    bool writeTGAFile(const char* file, bool rle = true);
-    bool flipHorizontally();
-    bool flipVertically();
-    bool scale(int w, int h);
-    TGAColor get(int x, int y);
-    bool set(int x, int y, TGAColor c);
-    int getWidth();
-    int getHeight();
-    int getBytesPP();
-    unsigned char* buffer();
-    void clear();
+    TGAColor get(const int x, const int y) const;
+    void set(const int x, const int y, const TGAColor& c);
 
-    TGAImage& operator=(const TGAImage& img);
+    int width() const noexcept { return w; }
+    int height() const noexcept { return h; }
 
-   protected:
-    unsigned char* data;
-    int width;
-    int height;
-    int bytespp;
+    bool readTGAFile(const std::filesystem::path& filename);
+    bool writeTGAFile(const std::filesystem::path& filename,
+                      const bool vflip = true, const bool rle = true) const;
+
+    void flipHorizontally();
+    void flipVertically();
+
+   private:
+    int w{0};
+    int h{0};
+    std::uint8_t bpp{0};
+    std::vector<std::uint8_t> data{};
 
     bool loadRLEData(std::ifstream& in);
-    bool unloadRLEData(std::ofstream& out);
+    bool unloadRLEData(std::ofstream& out) const;
 };
-
-#endif
