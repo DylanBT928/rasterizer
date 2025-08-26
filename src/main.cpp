@@ -1,14 +1,12 @@
-#include "tgaimage.hpp"
+#include <algorithm>
+#include <cstdlib>
+#include <ctime>
 
-constexpr TGAColor white{{255, 255, 255, 255}};
-constexpr TGAColor red{{255, 0, 0, 255}};
-constexpr TGAColor green{{0, 255, 0, 255}};
-constexpr TGAColor blue{{0, 0, 255, 255}};
-constexpr TGAColor yellow{{255, 200, 0, 255}};
+#include "tgaimage.hpp"
 
 void line(int x1, int y1, int x2, int y2, TGAImage &framebuffer, TGAColor color)
 {
-    bool steep{std::abs(x1 - x2) < std::abs(y1 - y2)};
+    bool steep{std::abs(x2 - x1) < std::abs(y2 - y1)};
 
     if (steep)
     {
@@ -22,15 +20,40 @@ void line(int x1, int y1, int x2, int y2, TGAImage &framebuffer, TGAColor color)
         std::swap(y1, y2);
     }
 
-    for (int x{x1}; x <= x2; ++x)
-    {
-        float t{(x - x1) / static_cast<float>(x2 - x1)};
-        int y{static_cast<int>(std::round(y1 + (y2 - y1) * t))};
+    const int dx{x2 - x1};
+    const int dy{std::abs(y2 - y1)};
+    const int ystep{(y1 < y2) ? 1 : -1};
 
-        if (steep)
+    int error{dx / 2};
+    int y{y1};
+
+    if (steep)
+    {
+        for (int x{x1}; x <= x2; ++x)
+        {
             framebuffer.set(y, x, color);
-        else
+            error -= dy;
+
+            if (error < 0)
+            {
+                y += ystep;
+                error += dx;
+            }
+        }
+    }
+    else
+    {
+        for (int x{x1}; x <= x2; ++x)
+        {
             framebuffer.set(x, y, color);
+            error -= dy;
+
+            if (error < 0)
+            {
+                y += ystep;
+                error += dx;
+            }
+        }
     }
 }
 
@@ -40,23 +63,25 @@ int main()
     constexpr int height{64};
     TGAImage framebuffer(width, height, TGAImage::RGB);
 
-    int ax{7};
-    int ay{3};
+    std::srand(std::time({}));
+    const std::size_t n{std::size_t{1} << 24};
 
-    int bx{12};
-    int by{37};
+    for (std::size_t i{0}; i < n; ++i)
+    {
+        int ax{rand() % width};
+        int ay{rand() % height};
+        int bx{rand() % width};
+        int by{rand() % height};
 
-    int cx{62};
-    int cy{53};
+        TGAColor color{};
+        color.rgba[0] = static_cast<std::uint8_t>(rand() % 256);
+        color.rgba[1] = static_cast<std::uint8_t>(rand() % 256);
+        color.rgba[2] = static_cast<std::uint8_t>(rand() % 256);
+        color.rgba[3] = 255;
+        color.bytesPerPixel = 3;
 
-    line(ax, ay, bx, by, framebuffer, red);
-    line(cx, cy, bx, by, framebuffer, green);
-    line(cx, cy, ax, ay, framebuffer, blue);
-    line(ax, ay, cx, cy, framebuffer, yellow);
-
-    framebuffer.set(ax, ay, white);
-    framebuffer.set(bx, by, white);
-    framebuffer.set(cx, cy, white);
+        line(ax, ay, bx, by, framebuffer, color);
+    }
 
     framebuffer.writeTGAFile("assets/output.tga");
     return 0;

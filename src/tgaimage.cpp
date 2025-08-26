@@ -36,7 +36,23 @@ void TGAImage::set(const int x, const int y, const TGAColor& c)
          static_cast<std::size_t>(x)) *
         static_cast<std::size_t>(bpp)};
 
-    std::memcpy(&data[idx], c.rgba.data(), static_cast<std::size_t>(bpp));
+    if (bpp == 3)
+    {
+        data[idx] = c.rgba[0];
+        data[idx + 1] = c.rgba[1];
+        data[idx + 2] = c.rgba[2];
+    }
+    else if (bpp == 4)
+    {
+        data[idx] = c.rgba[0];
+        data[idx + 1] = c.rgba[1];
+        data[idx + 2] = c.rgba[2];
+        data[idx + 3] = c.rgba[3];
+    }
+    else
+    {
+        data[idx] = c.rgba[0];
+    }
 }
 
 bool TGAImage::readTGAFile(const std::filesystem::path& filename)
