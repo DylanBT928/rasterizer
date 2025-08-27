@@ -5,7 +5,7 @@ if(NOT is_multi_config AND NOT (CMAKE_BUILD_TYPE OR DEFINED ENV{CMAKE_BUILD_TYPE
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Release default")
 endif()
 
-project(katzu LANGUAGES CXX)
+project(rasterizer LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,5 +20,5 @@ find_package(OpenMP COMPONENTS CXX)
 
 file(GLOB SOURCES "src/*.cpp")
 
-add_executable(katzu ${SOURCES})
-target_link_libraries(katzu PRIVATE $<$<BOOL:${OpenMP_CXX_FOUND}>:OpenMP::OpenMP_CXX>)
+add_executable(rasterizer ${SOURCES})
+target_link_libraries(rasterizer PRIVATE $<$<BOOL:${OpenMP_CXX_FOUND}>:OpenMP::OpenMP_CXX>)

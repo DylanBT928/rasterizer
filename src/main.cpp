@@ -1,10 +1,21 @@
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <iostream>
+#include <tuple>
 
+#include "geometry.hpp"
+#include "model.hpp"
 #include "tgaimage.hpp"
 
-void line(int x1, int y1, int x2, int y2, TGAImage &framebuffer, TGAColor color)
+constexpr int width{800};
+constexpr int height{800};
+
+constexpr TGAColor white{{255, 255, 255, 255}};
+constexpr TGAColor red{{255, 0, 0, 255}};
+
+void line(int x1, int y1, int x2, int y2, TGAImage& framebuffer, TGAColor color)
 {
     bool steep{std::abs(x2 - x1) < std::abs(y2 - y1)};
 
@@ -57,30 +68,39 @@ void line(int x1, int y1, int x2, int y2, TGAImage &framebuffer, TGAColor color)
     }
 }
 
-int main()
+std::tuple<int, int> project(vec3 v)
 {
-    constexpr int width{64};
-    constexpr int height{64};
-    TGAImage framebuffer(width, height, TGAImage::RGB);
+    return {(v.x + 1.) * width / 2, (v.y + 1.) * height / 2};
+}
 
-    std::srand(std::time({}));
-    const std::size_t n{std::size_t{1} << 24};
-
-    for (std::size_t i{0}; i < n; ++i)
+int main(int argc, char** argv)
+{
+    if (argc != 2)
     {
-        int ax{rand() % width};
-        int ay{rand() % height};
-        int bx{rand() % width};
-        int by{rand() % height};
+        std::cerr << "Usage: " << argv[0] << " obj/model.obj" << std::endl;
+        return 1;
+    }
 
-        TGAColor color{};
-        color.rgba[0] = static_cast<std::uint8_t>(rand() % 256);
-        color.rgba[1] = static_cast<std::uint8_t>(rand() % 256);
-        color.rgba[2] = static_cast<std::uint8_t>(rand() % 256);
-        color.rgba[3] = 255;
-        color.bytesPerPixel = 3;
+    TGAImage framebuffer(width, height, TGAImage::RGB);
+    Model model(argv[1]);
+    int nverts = model.nverts();
+    int nfaces = model.nfaces();
 
-        line(ax, ay, bx, by, framebuffer, color);
+    for (int i{0}; i < nfaces; ++i)
+    {
+        auto [ax, ay] = project(model.vert(i, 0));
+        auto [bx, by] = project(model.vert(i, 1));
+        auto [cx, cy] = project(model.vert(i, 2));
+        line(ax, ay, bx, by, framebuffer, red);
+        line(bx, by, cx, cy, framebuffer, red);
+        line(cx, cy, ax, ay, framebuffer, red);
+    }
+
+    for (int i{0}; i < nverts; ++i)
+    {
+        vec3 v = model.vert(i);
+        auto [x, y] = project(v);
+        framebuffer.set(x, y, white);
     }
 
     framebuffer.writeTGAFile("assets/output.tga");
