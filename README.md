@@ -12,12 +12,12 @@ A compact C++20 learning project inspired by ssloy’s **tinyrenderer**. It impl
 Build and run with these commands:
 
 ```bash
-cmake -S . -B build
+cmake -S . -B build -G "Ninja"
 cmake --build build
 
 # Choose an .obj file to render
-./build/rasterizer obj/{file}.obj
-open assets/output.tga
+./build/rasterizer obj/{file}.obj        # Linux/macOS
+./build/rasterizer.exe obj/{file}.obj    # Windows
 ```
 
 > Output images are written to `assets/output.tga` by default.
