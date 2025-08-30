@@ -9,11 +9,12 @@
 #include "model.hpp"
 #include "tgaimage.hpp"
 
-constexpr int width{800};
-constexpr int height{800};
+constexpr int width{128};
+constexpr int height{128};
 
-constexpr TGAColor white{{255, 255, 255, 255}};
 constexpr TGAColor red{{255, 0, 0, 255}};
+constexpr TGAColor green{{0, 255, 0, 255}};
+constexpr TGAColor blue{{0, 0, 255, 255}};
 
 void line(int x1, int y1, int x2, int y2, TGAImage& framebuffer, TGAColor color)
 {
@@ -68,40 +69,67 @@ void line(int x1, int y1, int x2, int y2, TGAImage& framebuffer, TGAColor color)
     }
 }
 
-std::tuple<int, int> project(vec3 v)
+void triangle(int ax, int ay, int bx, int by, int cx, int cy,
+              TGAImage& framebuffer, TGAColor color)
 {
-    return {(v.x + 1.) * width / 2, (v.y + 1.) * height / 2};
+    if (ay > by)
+    {
+        std::swap(ax, bx);
+        std::swap(ay, by);
+    }
+
+    if (ay > cy)
+    {
+        std::swap(ax, cx);
+        std::swap(ay, cy);
+    }
+
+    if (by > cy)
+    {
+        std::swap(bx, cx);
+        std::swap(by, cy);
+    }
+
+    int totalHeight{cy - ay};
+
+    if (ay != by)
+    {
+        int segmentHeight{by - ay};
+
+        for (int y{ay}; y <= by; ++y)
+        {
+            int x1{ax + ((cx - ax) * (y - ay)) / totalHeight};
+            int x2{ax + ((bx - ax) * (y - ay)) / segmentHeight};
+            int x{std::min(x1, x2)};
+            int xMax{std::max(x1, x2)};
+
+            for (; x < xMax; ++x) framebuffer.set(x, y, color);
+        }
+    }
+
+    if (by != cy)
+    {
+        int segmentHeight{cy - by};
+
+        for (int y{by}; y <= cy; ++y)
+        {
+            int x1{ax + ((cx - ax) * (y - ay)) / totalHeight};
+            int x2{bx + ((cx - bx) * (y - by)) / segmentHeight};
+            int x{std::min(x1, x2)};
+            int xMax{std::max(x1, x2)};
+
+            for (; x < xMax; ++x) framebuffer.set(x, y, color);
+        }
+    }
 }
 
 int main(int argc, char** argv)
 {
-    if (argc != 2)
-    {
-        std::cerr << "Usage: " << argv[0] << " obj/model.obj" << std::endl;
-        return 1;
-    }
-
     TGAImage framebuffer(width, height, TGAImage::RGB);
-    Model model(argv[1]);
-    int nverts = model.nverts();
-    int nfaces = model.nfaces();
 
-    for (int i{0}; i < nfaces; ++i)
-    {
-        auto [ax, ay] = project(model.vert(i, 0));
-        auto [bx, by] = project(model.vert(i, 1));
-        auto [cx, cy] = project(model.vert(i, 2));
-        line(ax, ay, bx, by, framebuffer, red);
-        line(bx, by, cx, cy, framebuffer, red);
-        line(cx, cy, ax, ay, framebuffer, red);
-    }
-
-    for (int i{0}; i < nverts; ++i)
-    {
-        vec3 v = model.vert(i);
-        auto [x, y] = project(v);
-        framebuffer.set(x, y, white);
-    }
+    triangle(7, 45, 35, 100, 45, 60, framebuffer, red);
+    triangle(120, 35, 90, 5, 45, 110, framebuffer, green);
+    triangle(115, 83, 80, 90, 85, 120, framebuffer, blue);
 
     framebuffer.writeTGAFile("assets/output.tga");
     return 0;
