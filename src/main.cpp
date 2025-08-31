@@ -2,8 +2,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
-#include <iostream>
-#include <tuple>
 
 #include "geometry.hpp"
 #include "model.hpp"
@@ -69,56 +67,35 @@ void line(int x1, int y1, int x2, int y2, TGAImage& framebuffer, TGAColor color)
     }
 }
 
+double signedTriangleArea(int ax, int ay, int bx, int by, int cx, int cy)
+{
+    return 0.5 * ((by - ay) * (bx + ax) + (cy - by) * (cx + bx) +
+                  (ay - cy) * (ax + cx));
+}
+
 void triangle(int ax, int ay, int bx, int by, int cx, int cy,
               TGAImage& framebuffer, TGAColor color)
 {
-    if (ay > by)
+    int bbminx{std::min(std::min(ax, bx), cx)};
+    int bbminy{std::min(std::min(ay, by), cy)};
+    int bbmaxx{std::max(std::max(ax, bx), cx)};
+    int bbmaxy{std::max(std::max(ay, by), cy)};
+    double totalArea{signedTriangleArea(ax, ay, bx, by, cx, cy)};
+
+#pragma omp parallel for
+
+    for (int x{bbminx}; x <= bbmaxx; ++x)
     {
-        std::swap(ax, bx);
-        std::swap(ay, by);
-    }
-
-    if (ay > cy)
-    {
-        std::swap(ax, cx);
-        std::swap(ay, cy);
-    }
-
-    if (by > cy)
-    {
-        std::swap(bx, cx);
-        std::swap(by, cy);
-    }
-
-    int totalHeight{cy - ay};
-
-    if (ay != by)
-    {
-        int segmentHeight{by - ay};
-
-        for (int y{ay}; y <= by; ++y)
+        for (int y{bbminy}; y <= bbmaxy; ++y)
         {
-            int x1{ax + ((cx - ax) * (y - ay)) / totalHeight};
-            int x2{ax + ((bx - ax) * (y - ay)) / segmentHeight};
-            int x{std::min(x1, x2)};
-            int xMax{std::max(x1, x2)};
+            double alpha{signedTriangleArea(x, y, bx, by, cx, cy) / totalArea};
+            double beta{signedTriangleArea(x, y, cx, cy, ax, ay) / totalArea};
+            double gamma{signedTriangleArea(x, y, ax, ay, bx, by) / totalArea};
 
-            for (; x < xMax; ++x) framebuffer.set(x, y, color);
-        }
-    }
+            if (alpha < 0 || beta < 0 || gamma < 0)
+                continue;
 
-    if (by != cy)
-    {
-        int segmentHeight{cy - by};
-
-        for (int y{by}; y <= cy; ++y)
-        {
-            int x1{ax + ((cx - ax) * (y - ay)) / totalHeight};
-            int x2{bx + ((cx - bx) * (y - by)) / segmentHeight};
-            int x{std::min(x1, x2)};
-            int xMax{std::max(x1, x2)};
-
-            for (; x < xMax; ++x) framebuffer.set(x, y, color);
+            framebuffer.set(x, y, color);
         }
     }
 }
