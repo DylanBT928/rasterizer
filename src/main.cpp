@@ -7,8 +7,8 @@
 #include "model.hpp"
 #include "tgaimage.hpp"
 
-constexpr int width{128};
-constexpr int height{128};
+constexpr int width{800};
+constexpr int height{800};
 
 constexpr TGAColor red{{255, 0, 0, 255}};
 constexpr TGAColor green{{0, 255, 0, 255}};
@@ -82,6 +82,9 @@ void triangle(int ax, int ay, int bx, int by, int cx, int cy,
     int bbmaxy{std::max(std::max(ay, by), cy)};
     double totalArea{signedTriangleArea(ax, ay, bx, by, cx, cy)};
 
+    if (totalArea < 1)
+        return;
+
 #pragma omp parallel for
 
     for (int x{bbminx}; x <= bbmaxx; ++x)
@@ -100,13 +103,33 @@ void triangle(int ax, int ay, int bx, int by, int cx, int cy,
     }
 }
 
+std::tuple<int, int> project(vec3 v)
+{
+    return {(v.x + 1.0) * width / 2, (v.y + 1.0) * height / 2};
+}
+
 int main(int argc, char** argv)
 {
-    TGAImage framebuffer(width, height, TGAImage::RGB);
+    if (argc != 2)
+    {
+        std::cerr << "Usage: " << argv[0] << " obj/model.obj" << std::endl;
+        return 1;
+    }
 
-    triangle(7, 45, 35, 100, 45, 60, framebuffer, red);
-    triangle(120, 35, 90, 5, 45, 110, framebuffer, green);
-    triangle(115, 83, 80, 90, 85, 120, framebuffer, blue);
+    TGAImage framebuffer(width, height, TGAImage::RGB);
+    Model model(argv[1]);
+    int nfaces = model.nfaces();
+
+    for (int i{0}; i < nfaces; ++i)
+    {
+        auto [ax, ay] = project(model.vert(i, 0));
+        auto [bx, by] = project(model.vert(i, 1));
+        auto [cx, cy] = project(model.vert(i, 2));
+
+        TGAColor rnd;
+        for (int c{0}; c < 3; ++c) rnd[c] = std::rand() % 255;
+        triangle(ax, ay, bx, by, cx, cy, framebuffer, rnd);
+    }
 
     framebuffer.writeTGAFile("assets/output.tga");
     return 0;
