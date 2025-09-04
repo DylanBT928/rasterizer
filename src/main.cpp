@@ -2,13 +2,14 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <string>
 
 #include "geometry.hpp"
 #include "model.hpp"
 #include "tgaimage.hpp"
 
-constexpr int width{64};
-constexpr int height{64};
+constexpr int width{800};
+constexpr int height{800};
 
 constexpr TGAColor red{{255, 0, 0, 255}};
 constexpr TGAColor green{{0, 255, 0, 255}};
@@ -73,8 +74,8 @@ double signedTriangleArea(int ax, int ay, int bx, int by, int cx, int cy)
                   (ay - cy) * (ax + cx));
 }
 
-void triangle(int ax, int ay, int az, int bx, int by, int bz, int cx, int cy,
-              int cz, TGAImage& framebuffer)
+void triangle(int ax, int ay, int bx, int by, int cx, int cy,
+              TGAImage& framebuffer, TGAColor color)
 {
     int bbminx{std::min(std::min(ax, bx), cx)};
     int bbminy{std::min(std::min(ay, by), cy)};
@@ -98,10 +99,7 @@ void triangle(int ax, int ay, int az, int bx, int by, int bz, int cx, int cy,
             if (alpha < 0 || beta < 0 || gamma < 0)
                 continue;
 
-            unsigned char z{static_cast<unsigned char>(alpha * az + beta * bz +
-                                                       gamma * cz)};
-
-            framebuffer.set(x, y, {{z}});
+            framebuffer.set(x, y, color);
         }
     }
 }
@@ -113,21 +111,26 @@ std::tuple<int, int> project(vec3 v)
 
 int main(int argc, char** argv)
 {
+    if (argc != 2)
+    {
+        std::cerr << "Usage: " << argv[0] << " obj/model.obj" << std::endl;
+        return 1;
+    }
+
     TGAImage framebuffer(width, height, TGAImage::RGB);
+    Model model(argv[1]);
+    int nfaces = model.nfaces();
 
-    int ax{17};
-    int ay{4};
-    int az{13};
+    for (int i{0}; i < nfaces; ++i)
+    {
+        auto [ax, ay] = project(model.vert(i, 0));
+        auto [bx, by] = project(model.vert(i, 1));
+        auto [cx, cy] = project(model.vert(i, 2));
 
-    int bx{55};
-    int by{39};
-    int bz(128);
-
-    int cx{23};
-    int cy{59};
-    int cz{255};
-
-    triangle(ax, ay, az, bx, by, bz, cx, cy, cz, framebuffer);
+        TGAColor rnd;
+        for (int c{0}; c < 3; ++c) rnd[c] = std::rand() % 255;
+        triangle(ax, ay, bx, by, cx, cy, framebuffer, rnd);
+    }
 
     framebuffer.writeTGAFile("assets/output.tga");
     return 0;
