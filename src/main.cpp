@@ -42,6 +42,10 @@ void triangle(int ax, int ay, int az, int bx, int by, int bz, int cx, int cy,
 
             unsigned char z{static_cast<unsigned char>(alpha * az + beta * bz +
                                                        gamma * cz)};
+
+            if (z <= zbuffer.get(x, y)[0])
+                continue;
+
             zbuffer.set(x, y, {{z}});
 
             framebuffer.set(x, y, color);
