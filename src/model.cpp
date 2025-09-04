@@ -49,29 +49,6 @@ Model::Model(const std::string filename)
     }
 
     std::cerr << "# v# " << nverts() << " f# " << nfaces() << std::endl;
-
-    std::vector<int> idx(nfaces());
-
-    for (int i{0}; i < nfaces(); ++i) idx[i] = i;
-
-    std::sort(idx.begin(), idx.end(),
-              [&](const int& a, const int& b)
-              {
-                  float aminz = std::min(vert(a, 0).z,
-                                         std::min(vert(a, 1).z, vert(a, 2).z));
-
-                  float bminz = std::min(vert(b, 0).z,
-                                         std::min(vert(b, 1).z, vert(b, 2).z));
-
-                  return aminz < bminz;
-              });
-
-    std::vector<int> faces2(nfaces() * 3);
-
-    for (int i{0}; i < nfaces(); ++i)
-        for (int j{0}; j < 3; ++j) faces2[i * 3 + j] = faces[idx[i] * 3 + j];
-
-    faces = faces2;
 }
 
 int Model::nverts() const { return verts.size(); }
