@@ -53,6 +53,8 @@ void triangle(int ax, int ay, int az, int bx, int by, int bz, int cx, int cy,
     }
 }
 
+vec3 rotate(vec3 v);  // TODO:
+
 std::tuple<int, int, int> project(vec3 v)
 {
     return {(v.x + 1.0) * width / 2, (v.y + 1.0) * height / 2,
