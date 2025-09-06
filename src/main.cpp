@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <ctime>
 
@@ -18,10 +19,12 @@ double signedTriangleArea(int ax, int ay, int bx, int by, int cx, int cy)
 void triangle(int ax, int ay, int az, int bx, int by, int bz, int cx, int cy,
               int cz, TGAImage& zbuffer, TGAImage& framebuffer, TGAColor color)
 {
-    int bbminx{std::min(std::min(ax, bx), cx)};
-    int bbminy{std::min(std::min(ay, by), cy)};
-    int bbmaxx{std::max(std::max(ax, bx), cx)};
-    int bbmaxy{std::max(std::max(ay, by), cy)};
+    int bbminx{std::max(0, std::min(std::min(ax, bx), cx))};
+    int bbminy{std::max(0, std::min(std::min(ay, by), cy))};
+    int bbmaxx{
+        std::min(framebuffer.width() - 1, std::max(std::max(ax, bx), cx))};
+    int bbmaxy{
+        std::min(framebuffer.height() - 1, std::max(std::max(ay, by), cy))};
     double totalArea{signedTriangleArea(ax, ay, bx, by, cx, cy)};
 
     if (totalArea < 1)
@@ -53,7 +56,21 @@ void triangle(int ax, int ay, int az, int bx, int by, int bz, int cx, int cy,
     }
 }
 
-vec3 rotate(vec3 v);  // TODO:
+vec3 rotate(vec3 v)
+{
+    constexpr double a{M_PI / 6};
+    double c{std::cos(a)};
+    double s{std::sin(a)};
+    mat<3, 3> ry{{{c, 0, s}, {0, 1, 0}, {-s, 0, c}}};
+
+    return ry * v;
+}
+
+vec3 persp(vec3 v)
+{
+    constexpr double c{3.0};
+    return v / (1 - v.z / c);
+}
 
 std::tuple<int, int, int> project(vec3 v)
 {
@@ -76,9 +93,9 @@ int main(int argc, char** argv)
 
     for (int i{0}; i < nfaces; ++i)
     {
-        auto [ax, ay, az] = project(model.vert(i, 0));
-        auto [bx, by, bz] = project(model.vert(i, 1));
-        auto [cx, cy, cz] = project(model.vert(i, 2));
+        auto [ax, ay, az] = project(persp(rotate(model.vert(i, 0))));
+        auto [bx, by, bz] = project(persp(rotate(model.vert(i, 1))));
+        auto [cx, cy, cz] = project(persp(rotate(model.vert(i, 2))));
 
         TGAColor rnd;
         for (int c{0}; c < 3; ++c) rnd[c] = std::rand() % 255;
