@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <limits>
 
 #include "geometry.hpp"
 #include "model.hpp"
@@ -16,8 +17,9 @@ double signedTriangleArea(int ax, int ay, int bx, int by, int cx, int cy)
                   (ay - cy) * (ax + cx));
 }
 
-void triangle(int ax, int ay, int az, int bx, int by, int bz, int cx, int cy,
-              int cz, TGAImage& zbuffer, TGAImage& framebuffer, TGAColor color)
+void triangle(int ax, int ay, double az, int bx, int by, double bz, int cx,
+              int cy, double cz, std::vector<double>& zbuffer,
+              TGAImage& framebuffer, TGAColor color)
 {
     int bbminx{std::max(0, std::min(std::min(ax, bx), cx))};
     int bbminy{std::max(0, std::min(std::min(ay, by), cy))};
@@ -43,14 +45,12 @@ void triangle(int ax, int ay, int az, int bx, int by, int bz, int cx, int cy,
             if (alpha < 0 || beta < 0 || gamma < 0)
                 continue;
 
-            unsigned char z{static_cast<unsigned char>(alpha * az + beta * bz +
-                                                       gamma * cz)};
+            double z{alpha * az + beta * bz + gamma * cz};
 
-            if (z <= zbuffer.get(x, y)[0])
+            if (z <= zbuffer[x + y * width])
                 continue;
 
-            zbuffer.set(x, y, {{z}});
-
+            zbuffer[x + y * width] = z;
             framebuffer.set(x, y, color);
         }
     }
@@ -72,10 +72,9 @@ vec3 persp(vec3 v)
     return v / (1 - v.z / c);
 }
 
-std::tuple<int, int, int> project(vec3 v)
+std::tuple<int, int, double> project(vec3 v)
 {
-    return {(v.x + 1.0) * width / 2, (v.y + 1.0) * height / 2,
-            (v.z + 1.0) * 255.0 / 2};
+    return {(v.x + 1.0) * width / 2, (v.y + 1.0) * height / 2, v.z};
 }
 
 int main(int argc, char** argv)
@@ -86,7 +85,8 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    TGAImage zbuffer(width, height, TGAImage::GRAYSCALE);
+    std::vector<double> zbuffer(width * height,
+                                -std::numeric_limits<double>::max());
     TGAImage framebuffer(width, height, TGAImage::RGB);
     Model model(argv[1]);
     int nfaces = model.nfaces();
@@ -102,7 +102,6 @@ int main(int argc, char** argv)
         triangle(ax, ay, az, bx, by, bz, cx, cy, cz, zbuffer, framebuffer, rnd);
     }
 
-    zbuffer.writeTGAFile("assets/zbuffer.tga");
     framebuffer.writeTGAFile("assets/output.tga");
     return 0;
 }
