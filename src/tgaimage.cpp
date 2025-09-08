@@ -3,9 +3,11 @@
 #include <cstring>
 #include <iostream>
 
-TGAImage::TGAImage(const int w, const int h, const int bpp) noexcept
+TGAImage::TGAImage(const int w, const int h, const int bpp, TGAColor c) noexcept
     : w(w), h(h), bpp(bpp), data(w * h * bpp, 0)
 {
+    for (int j{0}; j < h; ++j)
+        for (int i{0}; i < w; ++i) set(i, j, c);
 }
 
 TGAColor TGAImage::get(const int x, const int y) const

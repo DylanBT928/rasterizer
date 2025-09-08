@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <cassert>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -35,13 +34,11 @@ struct TGAColor
 
     std::uint8_t& operator[](const int i) noexcept
     {
-        assert(0 <= i && i < 4);
         return rgba[static_cast<size_t>(i)];
     }
 
     const std::uint8_t& operator[](const int i) const noexcept
     {
-        assert(0 <= i && i < 4);
         return rgba[static_cast<size_t>(i)];
     }
 };
@@ -56,7 +53,7 @@ struct TGAImage
     };
 
     TGAImage() = default;
-    TGAImage(const int w, const int h, const int bpp) noexcept;
+    TGAImage(const int w, const int h, const int bpp, TGAColor c = {}) noexcept;
 
     TGAColor get(const int x, const int y) const;
     void set(const int x, const int y, const TGAColor& c);
