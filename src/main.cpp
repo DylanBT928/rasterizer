@@ -8,100 +8,122 @@
 #include "model.hpp"
 #include "tgaimage.hpp"
 
-constexpr int width{800};
-constexpr int height{800};
+mat<4, 4> ModelView, Viewport, Perspective;
 
-double signedTriangleArea(int ax, int ay, int bx, int by, int cx, int cy)
+void lookAt(const vec3 eye, const vec3 center, const vec3 up)
 {
-    return 0.5 * ((by - ay) * (bx + ax) + (cy - by) * (cx + bx) +
-                  (ay - cy) * (ax + cx));
+    vec3 n{normalized(eye - center)};
+    vec3 l{normalized(cross(up, n))};
+    vec3 m{normalized(cross(n, l))};
+
+    ModelView = mat<4, 4>{{{l.x, l.y, l.z, 0},
+                           {m.x, m.y, m.z, 0},
+                           {n.x, n.y, n.z, 0},
+                           {0, 0, 0, 1}}} *
+                mat<4, 4>{{{1, 0, 0, -center.x},
+                           {0, 1, 0, -center.y},
+                           {0, 0, 1, -center.z},
+                           {0, 0, 0, 1}}};
 }
 
-void triangle(int ax, int ay, double az, int bx, int by, double bz, int cx,
-              int cy, double cz, std::vector<double>& zbuffer,
-              TGAImage& framebuffer, TGAColor color)
+void perspective(const double f)
 {
-    int bbminx{std::max(0, std::min(std::min(ax, bx), cx))};
-    int bbminy{std::max(0, std::min(std::min(ay, by), cy))};
-    int bbmaxx{
-        std::min(framebuffer.width() - 1, std::max(std::max(ax, bx), cx))};
-    int bbmaxy{
-        std::min(framebuffer.height() - 1, std::max(std::max(ay, by), cy))};
-    double totalArea{signedTriangleArea(ax, ay, bx, by, cx, cy)};
+    Perspective = {
+        {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, -1 / f, 1}}};
+}
 
-    if (totalArea < 1)
+void viewport(const int x, const int y, const int w, const int h)
+{
+    Viewport = {{{w / 2.0, 0, 0, x + w / 2.0},
+                 {0, h / 2.0, 0, y + h / 2.0},
+                 {0, 0, 1, 0},
+                 {0, 0, 0, 1}}};
+}
+
+void rasterize(const vec4 clip[3], std::vector<double>& zbuffer,
+               TGAImage& framebuffer, const TGAColor color)
+{
+    vec4 ndc[3]{clip[0] / clip[0].w, clip[1] / clip[1].w, clip[2] / clip[2].w};
+    vec2 screen[3] = {(Viewport * ndc[0]).xy(), (Viewport * ndc[1]).xy(),
+                      (Viewport * ndc[2]).xy()};
+    mat<3, 3> ABC = {{{screen[0].x, screen[0].y, 1.0},
+                      {screen[1].x, screen[1].y, 1.0},
+                      {screen[2].x, screen[2].y, 1.0}}};
+
+    if (ABC.det() < 1)
         return;
+
+    auto [bbminx, bbmaxx]{std::minmax({screen[0].x, screen[1].x, screen[2].x})};
+    auto [bbminy, bbmaxy]{std::minmax({screen[0].y, screen[1].y, screen[2].y})};
 
 #pragma omp parallel for
 
-    for (int x{bbminx}; x <= bbmaxx; ++x)
+    for (int x{std::max<int>(bbminx, 0)};
+         x <= std::min<int>(bbmaxx, framebuffer.width() - 1); ++x)
     {
-        for (int y{bbminy}; y <= bbmaxy; ++y)
+        for (int y{std::max<int>(bbminy, 0)};
+             y <= std::min<int>(bbmaxy, framebuffer.height() - 1); ++y)
         {
-            double alpha{signedTriangleArea(x, y, bx, by, cx, cy) / totalArea};
-            double beta{signedTriangleArea(x, y, cx, cy, ax, ay) / totalArea};
-            double gamma{signedTriangleArea(x, y, ax, ay, bx, by) / totalArea};
+            vec3 bc{ABC.invertTranspose() *
+                    vec3{static_cast<double>(x), static_cast<double>(y), 1.0}};
 
-            if (alpha < 0 || beta < 0 || gamma < 0)
+            if (bc.x < 0 || bc.y < 0 || bc.z < 0)
                 continue;
 
-            double z{alpha * az + beta * bz + gamma * cz};
+            double z{bc * vec3{ndc[0].z, ndc[1].z, ndc[2].z}};
 
-            if (z <= zbuffer[x + y * width])
+            if (z <= zbuffer[x + y * framebuffer.width()])
                 continue;
 
-            zbuffer[x + y * width] = z;
+            zbuffer[x + y * framebuffer.width()] = z;
             framebuffer.set(x, y, color);
         }
     }
 }
 
-vec3 rotate(vec3 v)
-{
-    constexpr double a{M_PI / 6};
-    double c{std::cos(a)};
-    double s{std::sin(a)};
-    mat<3, 3> ry{{{c, 0, s}, {0, 1, 0}, {-s, 0, c}}};
-
-    return ry * v;
-}
-
-vec3 persp(vec3 v)
-{
-    constexpr double c{3.0};
-    return v / (1 - v.z / c);
-}
-
-std::tuple<int, int, double> project(vec3 v)
-{
-    return {(v.x + 1.0) * width / 2, (v.y + 1.0) * height / 2, v.z};
-}
-
 int main(int argc, char** argv)
 {
-    if (argc != 2)
+    if (argc < 2)
     {
         std::cerr << "Usage: " << argv[0] << " obj/model.obj" << std::endl;
         return 1;
     }
 
+    constexpr int width{800};
+    constexpr int height{800};
+
+    constexpr vec3 eye{-1, 0, 2};
+    constexpr vec3 center{0, 0, 0};
+    constexpr vec3 up{0, 1, 0};
+
+    lookAt(eye, center, up);
+    perspective(norm(eye - center));
+    viewport(width / 16, height / 16, width * 7 / 8, height * 7 / 8);
+
+    TGAImage framebuffer(width, height, TGAImage::RGB);
     std::vector<double> zbuffer(width * height,
                                 -std::numeric_limits<double>::max());
-    TGAImage framebuffer(width, height, TGAImage::RGB);
-    Model model(argv[1]);
-    int nfaces = model.nfaces();
 
-    for (int i{0}; i < nfaces; ++i)
+    for (int m{1}; m < argc; ++m)
     {
-        auto [ax, ay, az] = project(persp(rotate(model.vert(i, 0))));
-        auto [bx, by, bz] = project(persp(rotate(model.vert(i, 1))));
-        auto [cx, cy, cz] = project(persp(rotate(model.vert(i, 2))));
+        Model model(argv[m]);
+        int nfaces{model.nfaces()};
 
-        TGAColor rnd;
-        for (int c{0}; c < 3; ++c) rnd[c] = std::rand() % 255;
-        triangle(ax, ay, az, bx, by, bz, cx, cy, cz, zbuffer, framebuffer, rnd);
+        for (int i{0}; i < nfaces; ++i)
+        {
+            vec4 clip[3];
+            for (int d : {0, 1, 2})
+            {
+                vec3 v{model.vert(i, d)};
+                clip[d] = Perspective * ModelView * vec4{v.x, v.y, v.z, 1.0};
+            }
+
+            TGAColor rnd;
+            for (int c{0}; c < 3; ++c) rnd[c] = std::rand() % 255;
+            rasterize(clip, zbuffer, framebuffer, rnd);
+        }
     }
 
-    framebuffer.writeTGAFile("assets/output.tga");
+    framebuffer.writeTGAFile("assets/framebuffer.tga");
     return 0;
 }
