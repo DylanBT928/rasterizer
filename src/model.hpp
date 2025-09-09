@@ -10,8 +10,11 @@ class Model
     int nfaces() const;
     vec3 vert(const int i) const;
     vec3 vert(const int iface, const int nthvert) const;
+    vec3 normal(const int iface, const int nthvert) const;
 
    private:
     std::vector<vec3> verts{};
-    std::vector<int> faces{};
+    std::vector<vec3> norms{};
+    std::vector<int> facesVert{};
+    std::vector<int> facesNorm{};
 };
