@@ -80,7 +80,9 @@ Model::Model(const std::string filename)
                       << std::endl;
         }};
 
+    loadTexture("_diffuse.tga", diffuseMap);
     loadTexture("_nm.tga", normalMap);
+    loadTexture("_spec.tga", specularMap);
 }
 
 int Model::nverts() const { return verts.size(); }
@@ -111,3 +113,7 @@ vec2 Model::uv(const int iface, const int nthvert) const
 {
     return tex[facesTex[iface * 3 + nthvert]];
 }
+
+const TGAImage& Model::diffuse() const { return diffuseMap; }
+
+const TGAImage& Model::specular() const { return specularMap; }

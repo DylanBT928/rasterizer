@@ -29,20 +29,21 @@ struct PhongShader : IShader
 
     virtual std::pair<bool, TGAColor> fragment(const vec3 bar) const
     {
-        TGAColor glFragColor{{255, 255, 255, 255}};
-
         vec2 uv{varyingUV[0] * bar[0] + varyingUV[1] * bar[1] +
                 varyingUV[2] * bar[2]};
         vec4 n{normalized(ModelView.invertTranspose() * model.normal(uv))};
         vec4 r{normalized(2 * n * (n * l) - l)};
 
-        double ambient{0.3};
-        double diff{std::max(0.0, n * l)};
-        double spec{std::pow(std::max(r.z, 0.0), 35)};
+        double ambient{0.4};
+        double diffuse{1.0 * std::max(0.0, n * l)};
+        double specular{(3.0 * sample2D(model.specular(), uv)[0] / 255.0) *
+                        std::pow(std::max(r.z, 0.0), 35)};
+
+        TGAColor glFragColor{sample2D(model.diffuse(), uv)};
 
         for (int channel : {0, 1, 2})
-            glFragColor[channel] *=
-                std::min(1.0, ambient + 0.4 * diff + 0.9 * spec);
+            glFragColor[channel] = std::min<int>(
+                255, glFragColor[channel] * (ambient + diffuse + specular));
 
         return {false, glFragColor};
     }

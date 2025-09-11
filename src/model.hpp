@@ -12,9 +12,13 @@ class Model
     vec4 normal(const int iface, const int nthvert) const;
     vec4 normal(const vec2& uv) const;
     vec2 uv(const int iface, const int nthvert) const;
+    const TGAImage& diffuse() const;
+    const TGAImage& specular() const;
 
    private:
+    TGAImage diffuseMap;
     TGAImage normalMap;
+    TGAImage specularMap;
     std::vector<vec4> verts{};
     std::vector<vec4> norms{};
     std::vector<vec2> tex{};
