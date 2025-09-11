@@ -12,26 +12,18 @@ extern std::vector<double> zbuffer;
 struct PhongShader : IShader
 {
     const Model& model;
-    vec3 l;
-    vec3 tri[3];
-    vec3 varyingNorm[3];
+    vec4 l;
+    vec2 varyingUV[3];
 
     PhongShader(const vec3 light, const Model& m) : model(m)
     {
-        l = normalized(
-            (ModelView * vec4{light.x, light.y, light.z, 0.0}).xyz());
+        l = normalized(ModelView * vec4{light.x, light.y, light.z, 0.0});
     }
 
     virtual vec4 vertex(const int face, const int vert)
     {
-        vec3 v{model.vert(face, vert)};
-        vec3 n{model.normal(face, vert)};
-        vec4 glPosition{ModelView * vec4{v.x, v.y, v.z, 1.0}};
-
-        varyingNorm[vert] =
-            (ModelView.invertTranspose() * vec4{n.x, n.y, n.z, 0.0}).xyz();
-        tri[vert] = glPosition.xyz();
-
+        varyingUV[vert] = model.uv(face, vert);
+        vec4 glPosition{ModelView * model.vert(face, vert)};
         return Perspective * glPosition;
     }
 
@@ -39,9 +31,10 @@ struct PhongShader : IShader
     {
         TGAColor glFragColor{{255, 255, 255, 255}};
 
-        vec3 n{normalized(varyingNorm[0] * bar[0] + varyingNorm[1] * bar[1] +
-                          varyingNorm[2] * bar[2])};
-        vec3 r{normalized(2 * n * (n * l) - l)};
+        vec2 uv{varyingUV[0] * bar[0] + varyingUV[1] * bar[1] +
+                varyingUV[2] * bar[2]};
+        vec4 n{normalized(ModelView.invertTranspose() * model.normal(uv))};
+        vec4 r{normalized(2 * n * (n * l) - l)};
 
         double ambient{0.3};
         double diff{std::max(0.0, n * l)};
