@@ -2,6 +2,8 @@
 
 A compact C++20 learning project inspired by ssloy’s **tinyrenderer**. It implements a **CPU rasterization** pipeline with a simple TGA image backend and utilities for drawing, loading models, and writing output images. Ideal for experimenting with fundamentals (lines, projections, faces) before scaling to a fuller renderer.
 
+<img src="assets/demo.gif" height=500px alt="Demo rasterization of demon from Diablo 3">
+
 ## Run
 
 **Requirements**
