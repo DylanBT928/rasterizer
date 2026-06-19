@@ -2,5 +2,4 @@ build/
 .cache/
 *.DS_Store
 
-assets/*
-!assets/demo.gif
+framebuffer.tga
